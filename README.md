@@ -313,7 +313,27 @@ El proyecto demuestra control de versiones y despliegue declarativo mediante bun
 
 ## 11. Evidencias
 
-Las evidencias técnicas se encuentran en las salidas de los notebooks y en las corridas de los Jobs en Databricks.
+Las evidencias se muestran directamente en las salidas de los notebooks
+y en las corridas de los Jobs en Databricks.
+
+| Componente | Evidencia | Ubicación |
+|---|---|---|
+| Bronze | Conteos por lote y reejecución sin incremento | `01_bronze` |
+| Silver | Métricas antes y después de limpiar y deduplicar | `02_silver` |
+| Gold y calidad | Totales, restricciones y error de la fila rechazada | `03_gold` |
+| Orquestación | Tres tareas, reintentos, corrida exitosa y horario activo | Job `m4_ev_prod` |
+| Gobernanza | Permisos, máscara con mapeo y tags | `04_gobernanza` |
+| Versionado | Pull requests integrados y configuración del bundle | GitHub y archivos YAML |
+| Observabilidad | Linaje, liquid clustering y ejecución de OPTIMIZE | `05_observabilidad` |
+
+[Pull request #2: observabilidad y liquid clustering](https://github.com/josuerepos/m4-proyecto-ev/pull/2).
+
+La [guía de presentación](docs/presentacion.md) describe el orden de la
+demostración y las preguntas de defensa. El [procedimiento del disparador](docs/disparador.md)
+documenta la configuración de la programación de producción.
+
+Este repositorio no incluye capturas de pantalla. Las salidas y configuraciones
+se mostrarán en vivo desde Databricks durante la presentación.
 
 | Componente | Evidencia |
 |---|---|
