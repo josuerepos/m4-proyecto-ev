@@ -1,0 +1,41 @@
+# Desplegar el Job que procesa Bronze, Silver y Gold en orden.
+resources:
+  jobs:
+    ev_job:
+      name: m4_ev_${bundle.target}
+
+      max_concurrent_runs: 1
+
+      # Programar la ejecución diaria a las 08:00 de Costa Rica.
+      # Mantenerla pausada durante la validación inicial.
+      schedule:
+        quartz_cron_expression: "0 0 8 * * ?"
+        timezone_id: America/Costa_Rica
+        pause_status: PAUSED
+
+      tasks:
+        # Ingerir únicamente archivos nuevos mediante Auto Loader.
+        - task_key: bronze
+          max_retries: 2
+          min_retry_interval_millis: 60000
+          notebook_task:
+            notebook_path: ../notebooks/01_bronze.ipynb
+            source: WORKSPACE
+
+        # Limpiar, deduplicar y enriquecer los vehículos.
+        - task_key: silver
+          depends_on:
+            - task_key: bronze
+          run_if: ALL_SUCCESS
+          notebook_task:
+            notebook_path: ../notebooks/02_silver.ipynb
+            source: WORKSPACE
+
+        # Generar el resumen Gold sin ejecutar la prueba negativa.
+        - task_key: gold
+          depends_on:
+            - task_key: silver
+          run_if: ALL_SUCCESS
+          notebook_task:
+            notebook_path: ../notebooks/03_gold_job.ipynb
+            source: WORKSPACE
