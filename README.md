@@ -4,6 +4,8 @@ Proyecto del Módulo 4 de la Universidad Latina de Costa Rica.
 
 Implementa un Lakehouse con capas Bronze, Silver y Gold para procesar datos de vehículos eléctricos, controlar su calidad, aplicar gobierno de datos y automatizar su ejecución.
 
+Incluye un modelo estrella y un agente de consultas en lenguaje natural mediante Databricks Genie.
+
 ## 1. Problema y objetivo
 
 El proyecto responde la siguiente pregunta:
@@ -19,6 +21,7 @@ Para responderla, se construye un proceso que:
 - Calcula cantidades y porcentajes por fabricante y tipo.
 - Construye un modelo estrella para consultas analíticas.
 - Aplica controles de calidad, acceso y trazabilidad.
+- Permite consultar el modelo estrella mediante preguntas en español.
 
 Los resultados describen el extracto utilizado. No representan ventas, crecimiento mensual ni necesariamente la distribución de toda la población de vehículos eléctricos de Washington.
 
@@ -62,6 +65,8 @@ Los objetos se organizan dentro del catálogo `pf_fallas`.
 | `gold` | Agregado analítico y modelo estrella. |
 | `seguridad` | Tabla de acceso y función de enmascaramiento. |
 
+### Procesamiento de datos
+
 ```mermaid
 flowchart TD
     L["Archivos CSV: dos lotes"] --> B["Bronze: vehiculos_raw"]
@@ -76,6 +81,17 @@ flowchart TD
 ```
 
 Las relaciones entre las dimensiones y la tabla de hechos permiten analizar los vehículos por fabricante y tipo.
+
+### Consulta mediante el agente
+
+```mermaid
+flowchart TD
+    P["Pregunta en español"] --> A["Databricks Genie"]
+    A --> Q["Consulta SQL sobre el modelo estrella"]
+    Q --> R["Resultados y respuesta"]
+```
+
+Genie utiliza únicamente las tres tablas configuradas del modelo estrella. El agente consulta los datos después de su actualización; no forma parte del Job de carga.
 
 ## 4. Estructura del repositorio
 
@@ -95,7 +111,7 @@ m4-proyecto-ev/
 │   ├── 05_observabilidad.ipynb
 │   └── 06_modelo_estrella.ipynb
 └── docs/
-    ├── presentacion.md
+    ├── agente.md
     └── disparador.md
 ```
 
@@ -117,6 +133,7 @@ https://github.com/josuerepos/m4-proyecto-ev
 | Observabilidad | Consulta de linaje mediante tablas del sistema. |
 | Optimización | Liquid Clustering por `make` y `OPTIMIZE` en Bronze. |
 | O6 · Modelo estrella | Tabla de hechos, dos dimensiones, claves declaradas y consulta analítica. |
+| O9 · Agente de consultas | Databricks Genie sobre las tres tablas del modelo estrella. |
 
 ## 6. Bronze · Ingesta incremental
 
@@ -344,7 +361,7 @@ Las tablas se actualizan mediante `INSERT OVERWRITE` para evitar acumulación de
 
 La carga de hechos utiliza `LEFT JOIN` y claves dimensionales `NOT NULL`. Si falta una correspondencia, la inserción falla en lugar de descartar silenciosamente el vehículo.
 
-La ejecución manual y la ejecución completa del Job en `dev` confirmaron:
+La ejecución manual y las ejecuciones completas del Job en `dev` y `prod` confirmaron:
 
 | Validación | Resultado |
 |---|---:|
@@ -367,7 +384,7 @@ Definición del Job:
 
 `resources/ev_job.yml`
 
-El flujo actualizado contiene cuatro tareas:
+El flujo contiene cuatro tareas:
 
 ```mermaid
 flowchart TD
@@ -425,7 +442,7 @@ La consulta `SHOW GRANTS` confirmó el permiso:
 account users | SELECT | TABLE | pf_fallas.gold.vehiculos_por_fabricante
 ```
 
-Esta evidencia corresponde al agregado indicado. No implica que se haya otorgado el mismo acceso a todas las tablas nuevas del modelo estrella.
+Esta evidencia corresponde al agregado indicado. No implica que se haya otorgado el mismo acceso a todas las tablas del modelo estrella.
 
 ### Enmascaramiento
 
@@ -454,6 +471,14 @@ La máscara se utiliza para demostrar el mecanismo de control sobre una columna 
 | `vin_prefix` | `clasificacion_proyecto` | `identificador_restringido` |
 
 Los tags describen la clasificación del proyecto. No aplican por sí solos el enmascaramiento.
+
+### Acceso desde Genie
+
+Genie consulta las fuentes configuradas utilizando los permisos de datos correspondientes al usuario.
+
+Las instrucciones del agente orientan sus respuestas, pero no sustituyen los controles de acceso de Unity Catalog.
+
+El modelo estrella no incluye `vin_prefix`. Por ello, las consultas del agente no demuestran la máscara aplicada en Silver.
 
 ## 12. Observabilidad y optimización
 
@@ -498,7 +523,83 @@ Después de la optimización se conservaron las 30010 filas y los 30000 vehícul
 
 No se realizó una prueba comparativa de latencia, por lo que no se afirma una mejora de tiempo de consulta medida.
 
-## 13. Git y despliegue
+## 13. O9 · Agente de consultas con Databricks Genie
+
+Documentación: `docs/agente.md`.
+
+Se configuró un Genie Agent para responder preguntas en español sobre el modelo estrella.
+
+### Fuentes
+
+Se agregaron únicamente:
+
+- `pf_fallas.gold.fact_vehiculos`
+- `pf_fallas.gold.dim_fabricante`
+- `pf_fallas.gold.dim_tipo_vehiculo`
+
+No se agregó el agregado `vehiculos_por_fabricante`, para que las consultas analíticas se construyan desde los hechos y sus dimensiones.
+
+### Funcionamiento
+
+1. El usuario escribe una pregunta en lenguaje natural.
+2. Genie interpreta la solicitud y genera una consulta SQL.
+3. La consulta se ejecuta sobre las fuentes configuradas.
+4. El agente presenta los resultados y una respuesta.
+5. El usuario revisa el SQL y la información obtenida.
+
+También se pueden solicitar visualizaciones. La forma de presentar el resultado depende de la pregunta y de las capacidades disponibles en la interfaz.
+
+### Instrucciones configuradas
+
+Se proporcionó contexto para:
+
+- Responder en español.
+- Utilizar las tres tablas seleccionadas.
+- Relacionar hechos y dimensiones mediante sus claves.
+- Calcular las respuestas consultando los datos.
+- Contar vehículos desde la tabla de hechos.
+- Distinguir BEV y PHEV.
+- Interpretar `model_year` como año del modelo, no como fecha de venta.
+- Expresar la autonomía eléctrica en millas.
+- Tratar los valores nulos de autonomía como información no disponible.
+- Explicar el denominador de los porcentajes.
+- Pedir aclaraciones ante preguntas ambiguas.
+- Reconocer preguntas que no pueden responderse con las fuentes disponibles.
+
+### Preguntas verificadas
+
+| Pregunta | Resultado confirmado |
+|---|---|
+| ¿Cuántos vehículos hay en total? | 30000 |
+| ¿Cuántos fabricantes distintos tienen vehículos en el extracto? | 44 |
+| ¿Cuántos vehículos hay de cada tipo? | BEV: 23780; PHEV: 6220 |
+| ¿Cuántos vehículos TESLA son BEV y qué porcentaje representan del total? | 12396; 41,32 % |
+| ¿Cuántos vehículos se vendieron durante septiembre de 2026? | Reconoció que no existe información de ventas en el modelo. |
+
+Los resultados numéricos coinciden con las validaciones del modelo estrella.
+
+Las cinco pruebas reportadas no necesitaron correcciones de resultados. Esto no garantiza que todas las preguntas futuras produzcan respuestas correctas.
+
+### Ejemplos adicionales
+
+- ¿Cuáles son las cinco marcas con más vehículos?
+- ¿Cuál es la autonomía eléctrica promedio por fabricante?
+- ¿Cuántos vehículos BEV tiene cada fabricante?
+- Muestra un gráfico de barras con la cantidad de vehículos BEV y PHEV.
+
+Los ejemplos adicionales describen posibilidades de consulta; no se presentan como pruebas verificadas.
+
+### Reproducción y versionamiento
+
+El agente se configura como un objeto dentro del workspace de Databricks.
+
+`docs/agente.md` documenta sus fuentes, relaciones, instrucciones, pruebas y limitaciones.
+
+El bundle actual despliega el Job y sus archivos. No crea ni despliega automáticamente el agente Genie.
+
+La configuración de Genie debe recrearse siguiendo la documentación si se utiliza otro workspace.
+
+## 14. Git y despliegue
 
 El proyecto utiliza:
 
@@ -517,16 +618,18 @@ El bundle se llama `m4_proyecto_ev` y contiene los targets `dev` y `prod`.
 ### Flujo de trabajo
 
 1. Editar en la rama `dev`.
-2. Desplegar y probar en el target `dev`.
+2. Desplegar y probar en el target `dev` cuando cambie el código o la configuración del Job.
 3. Revisar código, resultados y documentación.
 4. Hacer commit y push.
 5. Crear el pull request con base `main` y comparación `dev`.
 6. Integrar el pull request.
 7. Actualizar la carpeta de `main` mediante Pull.
-8. Desplegar en el target `prod`.
-9. Ejecutar y verificar el Job de producción.
+8. Desplegar en el target `prod` cuando corresponda.
+9. Ejecutar y verificar el Job después de cambios funcionales.
 
 Los despliegues se realizan desde Databricks. No se implementó automatización con GitHub Actions.
+
+Los cambios exclusivamente de documentación no requieren volver a ejecutar el Job.
 
 ### Separación de targets
 
@@ -538,7 +641,7 @@ Se evita ejecutar simultáneamente Jobs de ambos targets sobre estos objetos.
 
 El límite `max_concurrent_runs: 1` se aplica a cada Job por separado; no coordina la concurrencia entre Jobs distintos.
 
-## 14. Cómo ejecutar el proyecto
+## 15. Cómo ejecutar el proyecto
 
 ### Requisitos
 
@@ -547,6 +650,7 @@ El límite `max_concurrent_runs: 1` se aplica a cada Job por separado; no coordi
 - Carpeta Git conectada al repositorio.
 - Los dos archivos CSV utilizados.
 - Cómputo compatible con los notebooks.
+- Genie Agents disponible y un SQL warehouse para sus consultas.
 
 ### Preparación inicial
 
@@ -562,6 +666,8 @@ El límite `max_concurrent_runs: 1` se aplica a cada Job por separado; no coordi
 10. Ejecutar `04_gobernanza.ipynb` para configurar y probar la seguridad.
 11. Ejecutar `05_observabilidad.ipynb` para revisar linaje y optimización.
 12. Ejecutar `06_modelo_estrella.ipynb` y comprobar sus resultados.
+13. Configurar Genie siguiendo `docs/agente.md`.
+14. Ejecutar las preguntas de validación del agente.
 
 La inserción inválida de `03_gold.ipynb` debe fallar de forma intencional. Ese error demuestra el funcionamiento del control de calidad.
 
@@ -569,18 +675,19 @@ La inserción inválida de `03_gold.ipynb` debe fallar de forma intencional. Ese
 
 Una vez preparados los datos y objetos:
 
-1. Desplegar el bundle en el target correspondiente.
-2. Abrir el Job desplegado.
-3. Ejecutar las cuatro tareas.
+1. Desplegar el bundle si hay cambios funcionales pendientes.
+2. Abrir el Job del target correspondiente.
+3. Ejecutar las cuatro tareas o esperar la programación configurada.
 4. Revisar el estado y los resultados de las consultas.
+5. Abrir Genie para consultar el modelo estrella actualizado.
 
 El Job no ejecuta los notebooks de configuración, gobierno u observabilidad.
 
 No se debe borrar el checkpoint para una ejecución habitual. Tampoco se deben modificar archivos ya procesados esperando que Auto Loader los trate como archivos nuevos.
 
-## 15. Evidencias para la demostración
+## 16. Evidencias para la demostración
 
-Las evidencias se revisan directamente en Databricks mediante notebooks, metadatos y resultados de ejecuciones.
+Las evidencias se revisan directamente en Databricks mediante notebooks, metadatos, conversaciones del agente y resultados de ejecuciones.
 
 | Evidencia | Ubicación |
 |---|---|
@@ -589,19 +696,24 @@ Las evidencias se revisan directamente en Databricks mediante notebooks, metadat
 | JOIN con tipos de vehículo | `02_silver.ipynb` |
 | Agregado y restricciones | `03_gold.ipynb` |
 | Rechazo de cantidad negativa | `03_gold.ipynb` |
-| Ejecución de las cuatro tareas | Runs del Job actualizado de `dev` |
+| Ejecución de las cuatro tareas | Runs de los Jobs de `dev` y `prod` |
+| Configuración del horario | Configuración del Job de `prod` |
 | Permisos, máscara y tags | `04_gobernanza.ipynb` |
 | Linaje y Liquid Clustering | `05_observabilidad.ipynb` |
 | Modelo estrella y claves | `06_modelo_estrella.ipynb` |
 | Comparación entre modelo y agregado | Celda 9 de `06_modelo_estrella.ipynb` |
+| Preguntas y respuestas del agente | Conversaciones de Genie |
+| Configuración y pruebas de O9 | `docs/agente.md` |
 | Versionamiento e integración | Historial y pull requests de GitHub |
 | Configuración de despliegue | `databricks.yml` y `resources/ev_job.yml` |
 
 Las consultas de validación del modelo muestran resultados para revisión.
-La ejecución exitosa del notebook confirma que las instrucciones terminaron;
-la revisión de sus salidas confirma que los indicadores coinciden con lo esperado.
 
-## 16. Decisiones y limitaciones
+La ejecución exitosa del notebook confirma que las instrucciones terminaron; la revisión de sus salidas confirma que los indicadores coinciden con lo esperado.
+
+En Genie se revisan las respuestas y las consultas que las respaldan.
+
+## 17. Decisiones y limitaciones
 
 - Se conserva Bronze como registro de entrada, incluidos los duplicados.
 - Se utiliza `vehicle_id` como clave de negocio.
@@ -616,4 +728,9 @@ la revisión de sus salidas confirma que los indicadores coinciden con lo espera
 - Los targets `dev` y `prod` comparten datos y checkpoint.
 - Las pruebas de acceso se realizaron con una identidad.
 - El proceso de despliegue es manual desde Databricks.
-- O9 · Agentes queda pendiente y no se presenta como implementado.
+- Las ejecuciones del Job verificadas fueron iniciadas manualmente.
+- Genie utiliza únicamente las tres tablas configuradas del modelo estrella.
+- El agente no se despliega automáticamente mediante el bundle actual.
+- Las instrucciones del agente no sustituyen los permisos de Unity Catalog.
+- Las respuestas generadas requieren revisión.
+- O9 se validó mediante cuatro preguntas de datos y una prueba de límites.
