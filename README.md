@@ -404,10 +404,10 @@ La configuración base permanece pausada en `resources/ev_job.yml`. El target `p
 
 ### Estado de validación
 
-- La versión anterior de tres tareas se desplegó y ejecutó correctamente en `prod`.
-- La versión actual de cuatro tareas se desplegó y ejecutó correctamente en `dev`.
-- Los resultados del modelo estrella fueron revisados dentro de esa ejecución.
-- El despliegue de la ampliación O6 en `prod` está pendiente al momento de esta actualización.
+- La versión actual de cuatro tareas se desplegó y ejecutó correctamente en `dev` y `prod`.
+- Los resultados del modelo estrella se revisaron dentro de ambas ejecuciones.
+- Se confirmaron 30000 vehículos únicos, cero referencias faltantes y cero diferencias con el agregado Gold.
+- Se verificaron tres claves primarias y dos claves foráneas declaradas.
 
 Las ejecuciones verificadas fueron iniciadas manualmente. No se utiliza una ejecución manual como evidencia de activación por horario.
 
